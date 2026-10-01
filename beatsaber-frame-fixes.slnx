@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BeatSaberFrameFixes/BeatSaberFrameFixes.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BeatSaberFrameFixes.Tests/BeatSaberFrameFixes.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tests/StandIns/">
+    <Project Path="tests/StandIns/UnityEngine.CoreModule/UnityEngine.CoreModule.csproj" />
+    <Project Path="tests/StandIns/BeatSaber.Haptics/BeatSaber.Haptics.csproj" />
+    <Project Path="tests/StandIns/Main/Main.csproj" />
+  </Folder>
+</Solution>
