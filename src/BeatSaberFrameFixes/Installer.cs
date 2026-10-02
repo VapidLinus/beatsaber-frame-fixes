@@ -32,7 +32,7 @@ internal sealed class Installer(GameInstall game, string backupRoot, TextWriter 
         {
             new Fix(HapticsPatch.FileName, "Rumble fix",
                 haptics is null ? null : m => HapticsPatch.Apply(m, haptics),
-                $"hits {haptics?.HitStrengthPercent}%, other rumble {haptics?.OtherStrengthPercent}%, duration {haptics?.DurationPercent}%",
+                $"hits {haptics?.HitStrengthPercent}% strength and {haptics?.HitDurationPercent}% length, other rumble {haptics?.OtherStrengthPercent}% and {haptics?.OtherDurationPercent}%",
                 $"rumble {haptics}"),
             new Fix(PauseDebouncePatch.FileName, "Pause fix",
                 pauseDebounceMilliseconds is not { } ms ? null : m => PauseDebouncePatch.Apply(m, ms),

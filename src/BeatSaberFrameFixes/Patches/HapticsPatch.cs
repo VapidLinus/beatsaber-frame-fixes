@@ -1,12 +1,13 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
+using Mono.Cecil.Rocks;
 
 namespace BeatSaberFrameFixes.Patches;
 
 /// <summary>
 /// Scales rumble in <c>BeatSaber.Haptics.RumbleHapticFeedbackPlayer.PlayHapticFeedback</c>, the single method all
 /// gameplay and menu rumble passes through. Presets whose asset name starts with "Hit" (note cut, bad cut, bomb,
-/// chains) get the hit strength; all others get the other strength. Duration is scaled for every preset.
+/// chains) get the hit scales; all others get the other scales.
 /// </summary>
 internal static class HapticsPatch
 {
@@ -27,28 +28,33 @@ internal static class HapticsPatch
         var getName = imports.Unity("UnityEngine.Object", "get_name");
         var il = method.Body.GetILProcessor();
 
-        var multiplyStrength = il.Create(OpCodes.Mul);
-        var hitScale = il.Create(OpCodes.Ldc_R4, settings.HitStrengthPercent / 100f);
-        il.InsertAfter(strengthLoad, multiplyStrength);
-        foreach (var instruction in new[]
-        {
-            il.Create(OpCodes.Ldarg, preset),
-            il.Create(OpCodes.Callvirt, getName),
-            il.Create(OpCodes.Ldstr, HitPresetPrefix),
-            il.Create(OpCodes.Ldc_I4, (int)StringComparison.Ordinal),
-            il.Create(OpCodes.Callvirt, startsWith),
-            il.Create(OpCodes.Brtrue, hitScale),
-            il.Create(OpCodes.Ldc_R4, settings.OtherStrengthPercent / 100f),
-            il.Create(OpCodes.Br, multiplyStrength),
-            hitScale,
-        })
-        {
-            il.InsertBefore(multiplyStrength, instruction);
-        }
+        // Inserted code can push short-form branches out of their 127-byte range; expand them first and re-shorten after.
+        method.Body.SimplifyMacros();
+        MultiplyByPresetScale(strengthLoad, settings.HitStrengthPercent, settings.OtherStrengthPercent);
+        MultiplyByPresetScale(durationLoad, settings.HitDurationPercent, settings.OtherDurationPercent);
+        method.Body.OptimizeMacros();
 
-        var multiplyDuration = il.Create(OpCodes.Mul);
-        il.InsertAfter(durationLoad, multiplyDuration);
-        il.InsertBefore(multiplyDuration, il.Create(OpCodes.Ldc_R4, settings.DurationPercent / 100f));
+        void MultiplyByPresetScale(Instruction presetLoad, int hitPercent, int otherPercent)
+        {
+            var multiply = il.Create(OpCodes.Mul);
+            var hitScale = il.Create(OpCodes.Ldc_R4, hitPercent / 100f);
+            il.InsertAfter(presetLoad, multiply);
+            foreach (var instruction in new[]
+            {
+                il.Create(OpCodes.Ldarg, preset),
+                il.Create(OpCodes.Callvirt, getName),
+                il.Create(OpCodes.Ldstr, HitPresetPrefix),
+                il.Create(OpCodes.Ldc_I4, (int)StringComparison.Ordinal),
+                il.Create(OpCodes.Callvirt, startsWith),
+                il.Create(OpCodes.Brtrue, hitScale),
+                il.Create(OpCodes.Ldc_R4, otherPercent / 100f),
+                il.Create(OpCodes.Br, multiply),
+                hitScale,
+            })
+            {
+                il.InsertBefore(multiply, instruction);
+            }
+        }
     }
 
     private static MethodDefinition FindPlayMethod(ModuleDefinition module)

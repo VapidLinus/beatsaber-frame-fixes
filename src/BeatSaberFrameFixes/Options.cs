@@ -33,7 +33,11 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
                                        and chains (default 60)
           --other-strength <percent>   Rumble strength for arcs, walls, saber clashes
                                        and menu clicks (default 30)
-          --duration <percent>         Rumble length for everything (default 30)
+          --hit-duration <percent>     Rumble length for note hits, bad cuts, bombs
+                                       and chains (default 60)
+          --other-duration <percent>   Rumble length for menu clicks; arcs, walls and
+                                       saber clashes last while touching (default 780)
+          --duration <percent>         Sets both lengths at once
           --pause-debounce <ms>        How long the headset must report focus or
                                        presence lost before the game pauses (default 250)
           --no-haptics                 Leave rumble as the game has it
@@ -49,7 +53,8 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
         var command = Command.Apply;
         int hit = HapticsSettings.Default.HitStrengthPercent;
         int other = HapticsSettings.Default.OtherStrengthPercent;
-        int duration = HapticsSettings.Default.DurationPercent;
+        int hitDuration = HapticsSettings.Default.HitDurationPercent;
+        int otherDuration = HapticsSettings.Default.OtherDurationPercent;
         int debounce = DefaultPauseDebounceMilliseconds;
         bool haptics = true;
         bool pauseFix = true;
@@ -64,7 +69,9 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
             {
                 case "--hit-strength": hit = ParseNumber(name, Value(), max: 1000); break;
                 case "--other-strength": other = ParseNumber(name, Value(), max: 1000); break;
-                case "--duration": duration = ParseNumber(name, Value(), max: 1000); break;
+                case "--hit-duration": hitDuration = ParseNumber(name, Value(), max: 1000); break;
+                case "--other-duration": otherDuration = ParseNumber(name, Value(), max: 1000); break;
+                case "--duration": hitDuration = otherDuration = ParseNumber(name, Value(), max: 1000); break;
                 case "--pause-debounce": debounce = ParseNumber(name, Value(), max: 10000); break;
                 case "--no-haptics": haptics = false; break;
                 case "--no-pause-fix": pauseFix = false; break;
@@ -81,7 +88,7 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
 
         return new Options(
             command,
-            haptics ? new HapticsSettings(hit, other, duration) : null,
+            haptics ? new HapticsSettings(hit, other, hitDuration, otherDuration) : null,
             pauseFix ? debounce : null,
             gameDirectory);
     }

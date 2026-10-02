@@ -5,7 +5,7 @@ namespace BeatSaberFrameFixes.Tests;
 
 public sealed class InstallerTests : IDisposable
 {
-    private static readonly HapticsSettings DefaultHaptics = new(60, 30, 30);
+    private static readonly HapticsSettings DefaultHaptics = new(60, 30, 60, 780);
 
     private readonly string _root = Directory.CreateTempSubdirectory("bsff-tests-").FullName;
     private readonly StringWriter _output = new();
@@ -41,7 +41,7 @@ public sealed class InstallerTests : IDisposable
     {
         CreateInstaller().Apply(DefaultHaptics, 250);
 
-        CreateInstaller().Apply(new HapticsSettings(80, 40, 50), 500);
+        CreateInstaller().Apply(new HapticsSettings(80, 40, 50, 100), 500);
 
         Assert.Contains("hit 80%", ReadMarker("BeatSaber.Haptics.dll"));
         Assert.Contains("500 ms", ReadMarker("Main.dll"));

@@ -34,21 +34,22 @@ curl -fsSL https://raw.githubusercontent.com/VapidLinus/beatsaber-frame-fixes/ma
 
 | Event | Strength | Length |
 |---|---|---|
-| Note hit, bad cut, bomb, chains | 1.0 → **0.6** | 0.13 s → **0.04 s** |
+| Note hit, bad cut, bomb, chains | 1.0 → **0.6** | 0.13 s → **0.078 s** |
 | Saber on an arc or wall, sabers touching | 0.75 → **0.23** | while touching |
-| Menu click | 1.0 → **0.3** | 0.01 s → **0.003 s** |
+| Menu click | 1.0 → **0.3** | 0.01 s → **0.078 s** |
 
 Want it different? Add options after `bash -s --`, for example:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/VapidLinus/beatsaber-frame-fixes/main/beatsaber-frame-fixes.sh | bash -s -- --hit-strength 80 --duration 50
+curl -fsSL https://raw.githubusercontent.com/VapidLinus/beatsaber-frame-fixes/main/beatsaber-frame-fixes.sh | bash -s -- --hit-strength 80 --hit-duration 100
 ```
 
 | Option | Default | |
 |---|---|---|
 | `--hit-strength` | 60 | % strength for hits, bad cuts, bombs and chains |
 | `--other-strength` | 30 | % strength for everything else |
-| `--duration` | 30 | % length for all rumble |
+| `--hit-duration` | 60 | % length for hits, bad cuts, bombs and chains |
+| `--other-duration` | 780 | % length for menu clicks (the rest lasts while touching) |
 | `--pause-debounce` | 250 | ms the headset has to be "off" before the game pauses |
 | `--no-haptics`, `--no-pause-fix` | | skip one of the fixes |
 | `--restore` | | undo everything |

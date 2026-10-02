@@ -7,10 +7,10 @@ namespace BeatSaberFrameFixes.Tests;
 [Collection(nameof(UnityStaticState))]
 public class HapticsPatchTests
 {
-    private static readonly HapticsSettings Settings = new(HitStrengthPercent: 60, OtherStrengthPercent: 30, DurationPercent: 50);
+    private static readonly HapticsSettings Settings = new(HitStrengthPercent: 60, OtherStrengthPercent: 30, HitDurationPercent: 50, OtherDurationPercent: 780);
 
     [Fact]
-    public void Hit_presets_use_the_hit_strength_and_duration_scale()
+    public void Hit_presets_use_the_hit_strength_and_the_scaled_duration()
     {
         var rumble = Play(PatchedPlayer(), presetName: "HitNoteHapticPreset", strength: 1f, duration: 0.13f, time: 10f);
 
@@ -22,12 +22,12 @@ public class HapticsPatchTests
     [InlineData("ClickHapticPreset")]
     [InlineData("ArcSaberHapticPreset")]
     [InlineData("hitLowercaseIsNotAHit")]
-    public void Other_presets_use_the_other_strength(string presetName)
+    public void Other_presets_use_the_other_strength_and_duration(string presetName)
     {
         var rumble = Play(PatchedPlayer(), presetName, strength: 0.75f, duration: 0.01f, time: 0f);
 
         Assert.Equal(0.225f, rumble.Strength, 4);
-        Assert.Equal(0.005f, rumble.EndTime, 4);
+        Assert.Equal(0.078f, rumble.EndTime, 4);
     }
 
     [Fact]

@@ -9,7 +9,7 @@ public class OptionsTests
     {
         var options = Options.Parse([]);
 
-        Assert.Equal(new HapticsSettings(60, 30, 30), options.Haptics);
+        Assert.Equal(new HapticsSettings(60, 30, 60, 780), options.Haptics);
         Assert.Equal(250, options.PauseDebounceMilliseconds);
         Assert.Equal(Command.Apply, options.Command);
     }
@@ -17,10 +17,16 @@ public class OptionsTests
     [Fact]
     public void Values_can_be_overridden()
     {
-        var options = Options.Parse(["--hit-strength", "80", "--other-strength=40", "--duration", "100", "--pause-debounce", "500"]);
+        var options = Options.Parse(["--hit-strength", "80", "--other-strength=40", "--hit-duration", "100", "--other-duration", "10", "--pause-debounce", "500"]);
 
-        Assert.Equal(new HapticsSettings(80, 40, 100), options.Haptics);
+        Assert.Equal(new HapticsSettings(80, 40, 100, 10), options.Haptics);
         Assert.Equal(500, options.PauseDebounceMilliseconds);
+    }
+
+    [Fact]
+    public void Duration_sets_both_durations()
+    {
+        Assert.Equal(new HapticsSettings(60, 30, 45, 45), Options.Parse(["--duration", "45"]).Haptics);
     }
 
     [Fact]
