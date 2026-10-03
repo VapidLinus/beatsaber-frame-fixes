@@ -20,13 +20,14 @@ internal sealed class Installer(GameInstall game, string backupRoot, TextWriter 
     private const string VerifyFilesAdvice =
         "Restore the game files with Steam (Beat Saber > Properties > Installed Files > Verify integrity of game files) and run this again.";
 
-    private static readonly string[] PatchedFiles = [HapticsPatch.FileName, PauseDebouncePatch.FileName];
+    private static readonly string[] PatchedFiles = [HapticsPatch.FileName, PauseDebouncePatch.FileName, BloomCopyPatch.FileName];
 
     /// <summary>Backup file name for an original game file with the given SHA-256, e.g. <c>Main-1f3a….dll</c>.</summary>
     public static string BackupFileName(string fileName, string sha256) =>
         $"{Path.GetFileNameWithoutExtension(fileName)}-{sha256}{Path.GetExtension(fileName)}";
 
-    public void Apply(HapticsSettings? haptics, int? pauseDebounceMilliseconds)
+    /// <param name="bloomWidth">Bloom blur texture width in pixels, or null to keep the game's.</param>
+    public void Apply(HapticsSettings? haptics, int? pauseDebounceMilliseconds, bool bloomFix, int? bloomWidth = null)
     {
         var fixes = new[]
         {
@@ -38,6 +39,10 @@ internal sealed class Installer(GameInstall game, string backupRoot, TextWriter 
                 pauseDebounceMilliseconds is not { } ms ? null : m => PauseDebouncePatch.Apply(m, ms),
                 $"pauses only after focus or presence is lost for {pauseDebounceMilliseconds} ms",
                 $"pause debounce {pauseDebounceMilliseconds} ms"),
+            new Fix(BloomCopyPatch.FileName, "Bloom fix",
+                bloomFix || bloomWidth is not null ? m => PatchBloom(m, bloomFix, bloomWidth) : null,
+                BloomDescription(bloomFix, bloomWidth, "bloom skips a full-screen copy"),
+                BloomDescription(bloomFix, bloomWidth, "bloom without the full-screen copy")),
         };
 
         var changes = fixes.Select(Prepare).OfType<FileChange>().ToList();
@@ -66,6 +71,17 @@ internal sealed class Installer(GameInstall game, string backupRoot, TextWriter 
         foreach (var change in changes)
             output.WriteLine(change.Message);
     }
+
+    private static void PatchBloom(ModuleDefinition module, bool skipCopy, int? width)
+    {
+        if (skipCopy)
+            BloomCopyPatch.Apply(module);
+        if (width is { } pixels)
+            BloomBlurPatch.Apply(module, pixels);
+    }
+
+    private static string BloomDescription(bool skipCopy, int? width, string copyText) =>
+        string.Join(", ", new[] { skipCopy ? copyText : null, width is { } w ? BloomBlurPatch.Describe(w) : null }.OfType<string>());
 
     private FileChange? Prepare(Fix fix)
     {

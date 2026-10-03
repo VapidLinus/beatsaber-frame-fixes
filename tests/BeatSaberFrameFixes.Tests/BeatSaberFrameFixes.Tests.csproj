@@ -19,6 +19,9 @@
     <ProjectReference Include="..\StandIns\UnityEngine.CoreModule\UnityEngine.CoreModule.csproj" />
     <ProjectReference Include="..\StandIns\BeatSaber.Haptics\BeatSaber.Haptics.csproj" />
     <ProjectReference Include="..\StandIns\Main\Main.csproj" />
+    <ProjectReference Include="..\StandIns\Unity.RenderPipelines.Core.Runtime\Unity.RenderPipelines.Core.Runtime.csproj" />
+    <ProjectReference Include="..\StandIns\Unity.RenderPipelines.Universal.Runtime\Unity.RenderPipelines.Universal.Runtime.csproj" />
+    <ProjectReference Include="..\StandIns\Rendering\Rendering.csproj" />
   </ItemGroup>
 
 </Project>

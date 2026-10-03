@@ -9,5 +9,8 @@
     <Project Path="tests/StandIns/UnityEngine.CoreModule/UnityEngine.CoreModule.csproj" />
     <Project Path="tests/StandIns/BeatSaber.Haptics/BeatSaber.Haptics.csproj" />
     <Project Path="tests/StandIns/Main/Main.csproj" />
+    <Project Path="tests/StandIns/Unity.RenderPipelines.Core.Runtime/Unity.RenderPipelines.Core.Runtime.csproj" />
+    <Project Path="tests/StandIns/Unity.RenderPipelines.Universal.Runtime/Unity.RenderPipelines.Universal.Runtime.csproj" />
+    <Project Path="tests/StandIns/Rendering/Rendering.csproj" />
   </Folder>
 </Solution>

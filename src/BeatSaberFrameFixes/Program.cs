@@ -31,7 +31,7 @@ internal static class Program
             if (options.Command == Command.Restore)
                 installer.Restore();
             else
-                installer.Apply(options.Haptics, options.PauseDebounceMilliseconds);
+                installer.Apply(options.Haptics, options.PauseDebounceMilliseconds, options.BloomFix, options.BloomWidth);
 
             Console.WriteLine("Done! You can start Beat Saber now.");
             return 0;

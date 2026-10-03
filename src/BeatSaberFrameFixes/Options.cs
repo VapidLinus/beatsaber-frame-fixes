@@ -15,17 +15,18 @@ internal enum Command
 internal sealed class OptionsException(string message) : Exception(message);
 
 /// <summary>
-/// Parsed command line. A null <see cref="Haptics"/> or <see cref="PauseDebounceMilliseconds"/> means that fix is
-/// skipped (and removed if it was applied before).
+/// Parsed command line. A null <see cref="Haptics"/> or <see cref="PauseDebounceMilliseconds"/>, or a false
+/// <see cref="BloomFix"/>, means that fix is skipped (and removed if it was applied before). A null <see cref="BloomWidth"/>
+/// keeps the game's bloom blur.
 /// </summary>
-internal sealed record Options(Command Command, HapticsSettings? Haptics, int? PauseDebounceMilliseconds, string? GameDirectory)
+internal sealed record Options(Command Command, HapticsSettings? Haptics, int? PauseDebounceMilliseconds, bool BloomFix, int? BloomWidth, string? GameDirectory)
 {
     public const int DefaultPauseDebounceMilliseconds = 250;
 
     public const string Usage = """
         Usage: beatsaber-frame-fixes [options]
 
-        Applies the rumble fix and the pause fix to Beat Saber. Run it again with
+        Applies the rumble, pause and bloom fixes to Beat Saber. Run it again with
         different options to change them, or with --restore to undo everything.
 
         Options:
@@ -42,6 +43,9 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
                                        presence lost before the game pauses (default 250)
           --no-haptics                 Leave rumble as the game has it
           --no-pause-fix               Leave pausing as the game has it
+          --no-bloom-fix               Leave the bloom effect as the game has it
+          --bloom-width <px>           Width of the bloom blur texture (game: 512). Narrower
+                                       is cheaper but makes the glow blockier
           --restore                    Put the original game files back
           --game-dir <folder>          Beat Saber folder, if it isn't found automatically
           --version                    Show the version
@@ -58,6 +62,8 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
         int debounce = DefaultPauseDebounceMilliseconds;
         bool haptics = true;
         bool pauseFix = true;
+        bool bloomFix = true;
+        int? bloomWidth = null;
         string? gameDirectory = null;
 
         for (var i = 0; i < args.Length; i++)
@@ -75,6 +81,8 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
                 case "--pause-debounce": debounce = ParseNumber(name, Value(), max: 10000); break;
                 case "--no-haptics": haptics = false; break;
                 case "--no-pause-fix": pauseFix = false; break;
+                case "--no-bloom-fix": bloomFix = false; break;
+                case "--bloom-width": bloomWidth = ParseNumber(name, Value(), min: BloomBlurPatch.MinWidth, max: BloomBlurPatch.MaxWidth); break;
                 case "--game-dir": gameDirectory = Value(); break;
                 case "--restore": command = Command.Restore; break;
                 case "--version": command = Command.Version; break;
@@ -83,13 +91,15 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
             }
         }
 
-        if (command == Command.Apply && !haptics && !pauseFix)
-            throw new OptionsException("--no-haptics and --no-pause-fix together leave nothing to do. Use --restore to undo the fixes.");
+        if (command == Command.Apply && !haptics && !pauseFix && !bloomFix && bloomWidth is null)
+            throw new OptionsException("Skipping every fix leaves nothing to do. Use --restore to undo the fixes.");
 
         return new Options(
             command,
             haptics ? new HapticsSettings(hit, other, hitDuration, otherDuration) : null,
             pauseFix ? debounce : null,
+            bloomFix,
+            bloomWidth,
             gameDirectory);
     }
 
@@ -99,10 +109,10 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
         return argument.StartsWith("--") && equals > 0 ? (argument[..equals], argument[(equals + 1)..]) : (argument, null);
     }
 
-    private static int ParseNumber(string name, string value, int max)
+    private static int ParseNumber(string name, string value, int max, int min = 0)
     {
-        if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) || number > max)
-            throw new OptionsException($"{name} must be a whole number from 0 to {max}, not \"{value}\".");
+        if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) || number < min || number > max)
+            throw new OptionsException($"{name} must be a whole number from {min} to {max}, not \"{value}\".");
         return number;
     }
 }

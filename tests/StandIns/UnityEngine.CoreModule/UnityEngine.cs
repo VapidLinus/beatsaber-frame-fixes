@@ -38,6 +38,22 @@ namespace UnityEngine
     }
 }
 
+namespace UnityEngine
+{
+    /// <summary>Stand-in for <c>UnityEngine.Material</c>.</summary>
+    public class Material : Object
+    {
+    }
+}
+
+namespace UnityEngine.Rendering
+{
+    /// <summary>Stand-in for <c>UnityEngine.Rendering.CommandBuffer</c>.</summary>
+    public class CommandBuffer
+    {
+    }
+}
+
 namespace UnityEngine.XR
 {
     /// <summary>Stand-in for <c>UnityEngine.XR.XRNode</c>.</summary>

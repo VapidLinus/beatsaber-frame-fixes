@@ -11,6 +11,7 @@ public class OptionsTests
 
         Assert.Equal(new HapticsSettings(60, 30, 60, 780), options.Haptics);
         Assert.Equal(250, options.PauseDebounceMilliseconds);
+        Assert.True(options.BloomFix);
         Assert.Equal(Command.Apply, options.Command);
     }
 
@@ -34,12 +35,20 @@ public class OptionsTests
     {
         Assert.Null(Options.Parse(["--no-haptics"]).Haptics);
         Assert.Null(Options.Parse(["--no-pause-fix"]).PauseDebounceMilliseconds);
+        Assert.False(Options.Parse(["--no-bloom-fix"]).BloomFix);
     }
 
     [Fact]
-    public void Skipping_both_fixes_is_rejected()
+    public void Bloom_width_is_unchanged_unless_given()
     {
-        Assert.Throws<OptionsException>(() => Options.Parse(["--no-haptics", "--no-pause-fix"]));
+        Assert.Null(Options.Parse([]).BloomWidth);
+        Assert.Equal(256, Options.Parse(["--bloom-width", "256"]).BloomWidth);
+    }
+
+    [Fact]
+    public void Skipping_every_fix_is_rejected()
+    {
+        Assert.Throws<OptionsException>(() => Options.Parse(["--no-haptics", "--no-pause-fix", "--no-bloom-fix"]));
     }
 
     [Theory]
@@ -63,6 +72,8 @@ public class OptionsTests
     [InlineData("--hit-strength", "-1")]
     [InlineData("--duration", "1001")]
     [InlineData("--pause-debounce", "10001")]
+    [InlineData("--bloom-width", "8")]
+    [InlineData("--bloom-width", "4096")]
     [InlineData("--unknown")]
     [InlineData("--hit-strength")]
     public void Invalid_arguments_are_rejected(params string[] args)

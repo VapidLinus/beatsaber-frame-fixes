@@ -17,6 +17,16 @@ internal static class StandIns
 
     public static string UnityCorePath => Path.Combine(AppContext.BaseDirectory, "UnityEngine.CoreModule.dll");
 
+    public static string RenderingPath => Path.Combine(AppContext.BaseDirectory, "Rendering.dll");
+
+    /// <summary>Every stand-in game assembly, as a fake game's Managed folder needs them.</summary>
+    public static IEnumerable<string> AllPaths =>
+    [
+        MainPath, HapticsPath, UnityCorePath, RenderingPath,
+        Path.Combine(AppContext.BaseDirectory, "Unity.RenderPipelines.Core.Runtime.dll"),
+        Path.Combine(AppContext.BaseDirectory, "Unity.RenderPipelines.Universal.Runtime.dll"),
+    ];
+
     public static ModuleDefinition ReadModule(string path) =>
         ModuleDefinition.ReadModule(path, new ReaderParameters { AssemblyResolver = CreateResolver(), InMemory = true });
 
