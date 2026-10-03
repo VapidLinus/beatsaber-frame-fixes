@@ -12,7 +12,7 @@ public class OptionsTests
         Assert.Equal(new HapticsSettings(60, 30, 60, 780), options.Haptics);
         Assert.Equal(250, options.PauseDebounceMilliseconds);
         Assert.True(options.BloomSkipCopy);
-        Assert.Equal(new BloomBlurSettings(null, SongWidth: 256), options.BloomBlur);
+        Assert.Equal(new BloomBlurSettings(null, SongWidth: 464), options.BloomBlur);
         Assert.Equal(Command.Apply, options.Command);
     }
 
@@ -93,13 +93,24 @@ public class OptionsTests
     public void Bloom_blur_widths_can_be_set()
     {
         Assert.Equal(new BloomBlurSettings(null, SongWidth: 384), Options.Parse(["--bloom-song-width", "384"]).BloomBlur);
-        Assert.Equal(new BloomBlurSettings(384, SongWidth: 256), Options.Parse(["--bloom-width", "384"]).BloomBlur);
+        Assert.Equal(new BloomBlurSettings(640, SongWidth: 464), Options.Parse(["--bloom-width", "640"]).BloomBlur);
     }
 
-    [Fact]
-    public void Song_width_of_512_keeps_the_game_blur()
+    [Theory]
+    [InlineData("928")]
+    [InlineData("1024")]
+    public void Song_width_of_the_game_width_or_wider_keeps_the_game_blur(string songWidth)
     {
-        Assert.Null(Options.Parse(["--bloom-song-width", "512"]).BloomBlur);
+        Assert.Null(Options.Parse(["--bloom-song-width", songWidth]).BloomBlur);
+    }
+
+    [Theory]
+    [InlineData(464)]
+    [InlineData(512)]
+    [InlineData(800)]
+    public void Song_width_narrower_than_the_game_width_is_kept(int songWidth)
+    {
+        Assert.Equal(new BloomBlurSettings(null, SongWidth: songWidth), Options.Parse(["--bloom-song-width", songWidth.ToString()]).BloomBlur);
     }
 
     [Fact]
@@ -115,14 +126,14 @@ public class OptionsTests
         var options = Options.Parse(["--bloom-skip-copy", "off"]);
 
         Assert.False(options.BloomSkipCopy);
-        Assert.Equal(new BloomBlurSettings(null, SongWidth: 256), options.BloomBlur);
+        Assert.Equal(new BloomBlurSettings(null, SongWidth: 464), options.BloomBlur);
     }
 
     [Fact]
     public void Turning_everything_off_is_rejected()
     {
         Assert.Throws<OptionsException>(() => Options.Parse(
-            ["--rumble-tweaks", "off", "--pause-fix", "off", "--bloom-skip-copy", "off", "--bloom-song-width", "512"]));
+            ["--rumble-tweaks", "off", "--pause-fix", "off", "--bloom-skip-copy", "off", "--bloom-song-width", "928"]));
     }
 
     [Theory]

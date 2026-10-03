@@ -14,7 +14,7 @@ public class BloomBlurPatchTests
     {
         var effect = new Effect(StandIns.PatchAndLoad(StandIns.RenderingPath, _ => { }));
 
-        Assert.Equal((512, "Prefilter4"), effect.Frame(songPlaying: false));
+        Assert.Equal((928, "Prefilter4"), effect.Frame(songPlaying: false));
     }
 
     [Fact]
@@ -26,10 +26,21 @@ public class BloomBlurPatchTests
         Assert.Equal((256, "Prefilter13"), effect.Frame(songPlaying: true));
     }
 
+    [Fact]
+    public void Song_width_of_464_uses_the_13_tap_prefilter()
+    {
+        var effect = new Effect(Patch(new BloomBlurSettings(Width: null, SongWidth: 464)));
+
+        Assert.Equal((464, "Prefilter13"), effect.Frame(songPlaying: true));
+        Assert.Equal((928, "Prefilter4"), effect.Frame(songPlaying: false));
+    }
+
     [Theory]
     [InlineData(512)]
+    [InlineData(640)]
+    [InlineData(928)]
     [InlineData(1024)]
-    public void Game_width_or_wider_keeps_the_4_tap_prefilter(int width)
+    public void Widths_from_512_up_keep_the_4_tap_prefilter(int width)
     {
         var effect = new Effect(Patch(new BloomBlurSettings(width, SongWidth: null)));
 
@@ -41,9 +52,9 @@ public class BloomBlurPatchTests
     {
         var effect = new Effect(Patch(new BloomBlurSettings(Width: null, SongWidth: 256)));
 
-        Assert.Equal((512, "Prefilter4"), effect.Frame(songPlaying: false));
+        Assert.Equal((928, "Prefilter4"), effect.Frame(songPlaying: false));
         Assert.Equal((256, "Prefilter13"), effect.Frame(songPlaying: true));
-        Assert.Equal((512, "Prefilter4"), effect.Frame(songPlaying: false));
+        Assert.Equal((928, "Prefilter4"), effect.Frame(songPlaying: false));
     }
 
     [Fact]
@@ -68,6 +79,36 @@ public class BloomBlurPatchTests
     }
 
     [Fact]
+    public void Width_changes_are_logged()
+    {
+        var effect = new Effect(Patch(new BloomBlurSettings(Width: null, SongWidth: 464)));
+        UnityEngine.Debug.Messages.Clear();
+
+        effect.Frame(songPlaying: false);
+        effect.Frame(songPlaying: false);
+        effect.Frame(songPlaying: true);
+        effect.Frame(songPlaying: true);
+        effect.Frame(songPlaying: false);
+
+        Assert.Equal(
+            ["Bloom width now 928 px (change 1)", "Bloom width now 464 px (change 2)", "Bloom width now 928 px (change 3)"],
+            WidthMessages());
+    }
+
+    [Fact]
+    public void Flickering_width_logs_the_first_20_changes_only()
+    {
+        var effect = new Effect(Patch(new BloomBlurSettings(Width: null, SongWidth: 464)));
+        UnityEngine.Debug.Messages.Clear();
+
+        for (var frame = 0; frame < 60; frame++)
+            effect.Frame(songPlaying: frame % 2 == 0);
+
+        Assert.Equal(20, WidthMessages().Count);
+        Assert.Equal("Bloom width now 928 px (change 20)", WidthMessages()[^1]);
+    }
+
+    [Fact]
     public void Patching_twice_is_reported_as_a_mismatch()
     {
         var module = StandIns.ReadModule(StandIns.RenderingPath);
@@ -83,6 +124,12 @@ public class BloomBlurPatchTests
         Assert.Equal("bloom blur 256 px wide while a song plays", new BloomBlurSettings(null, 256).ToString());
         Assert.Equal("bloom blur 384 px wide, 256 px while a song plays", new BloomBlurSettings(384, 256).ToString());
     }
+
+    private static List<string> WidthMessages() =>
+        UnityEngine.Debug.Messages.Select(m => m.ToString()!)
+            .Where(m => m.Contains(BloomBlurPatch.WidthLogText))
+            .Select(m => m[m.IndexOf(BloomBlurPatch.WidthLogText, StringComparison.Ordinal)..])
+            .ToList();
 
     private static Assembly Patch(BloomBlurSettings settings) =>
         StandIns.PatchAndLoad(StandIns.RenderingPath, m => BloomBlurPatch.Apply(m, settings));

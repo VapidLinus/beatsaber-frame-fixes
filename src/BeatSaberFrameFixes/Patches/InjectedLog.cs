@@ -11,9 +11,12 @@ internal static class InjectedLog
 {
     public const string Prefix = "[beatsaber-frame-fixes] ";
 
+    /// <summary>Returns the module's injected <c>Write</c> method, adding it on first use.</summary>
     public static MethodReference Create(ModuleImports imports)
     {
         var module = imports.Module;
+        if (module.GetType("BeatSaberFrameFixes", "Log") is { } existing)
+            return existing.Methods.Single(m => m.Name == "Write");
         var type = new TypeDefinition("BeatSaberFrameFixes", "Log",
             TypeAttributes.Public | TypeAttributes.Abstract | TypeAttributes.Sealed | TypeAttributes.BeforeFieldInit,
             module.TypeSystem.Object);

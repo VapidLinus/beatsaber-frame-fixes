@@ -55,8 +55,8 @@ curl -fsSL https://raw.githubusercontent.com/VapidLinus/beatsaber-frame-fixes/ma
 | `--pause-fix` | on | `off` keeps the game's own pausing |
 | `--pause-debounce` | 250 | ms the headset has to be "off" before the game pauses |
 | `--bloom-skip-copy` | on | `off` keeps the game's full-screen copy |
-| `--bloom-song-width` | 256 | px width of the image the glow is blurred on while a song plays. 512 is full quality |
-| `--bloom-width` | 512 | the same for menus and pauses. Lower is cheaper but the glow gets blocky |
+| `--bloom-song-width` | 464 | px width of the image the glow is blurred on while a song plays. The game's own is 928 |
+| `--bloom-width` | the game's (928) | the same for menus and pauses. Lower is cheaper but the glow gets blocky |
 | `--restore` | | undo everything |
 
 Switches take `on` or `off`. With a switch off, its settings are ignored, so you can keep them in your command and just flip the switch. Strength can't go above 1.0, so hits can only get weaker. Running it again always starts from the original files, so settings don't stack.
@@ -67,7 +67,7 @@ The script downloads a small patcher (built from this repo by GitHub Actions), c
 
 - `BeatSaber.Haptics.dll`: scales strength and length in the one place all rumble goes through.
 - `Main.dll`: instead of pausing right away when the headset reports "off", waits 250 ms and only pauses if it's still off. Skipped blips are logged to Beat Saber's `Player.log`. It also tells the bloom when a song is playing.
-- `Rendering.dll`: the bloom used to copy the whole image and blend the glow from that copy back. Now it blends straight into the spare image and uses that as the new one, like Unity's own effects do. During songs it blurs a 256 px wide image instead of 512, with a finer sampling filter so thin sabers don't flicker.
+- `Rendering.dll`: the bloom used to copy the whole image and blend the glow from that copy back. Now it blends straight into the spare image and uses that as the new one, like Unity's own effects do. During songs it blurs a 464 px wide image instead of the game's 928, with a finer sampling filter so thin sabers don't flicker. Each width change is logged to `Player.log`.
 
 It checks the game code looks as expected before touching anything, and backs up the originals to `~/.local/share/beatsaber-frame-fixes/backup`. It should also work on a Steam Deck or Linux PC.
 

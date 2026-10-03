@@ -34,7 +34,7 @@ public class PyramidBloomMainEffectSO : MainEffectSO
 {
     private readonly PyramidBloomRendererSO _bloomRenderer = new();
 
-    private int _bloomTextureWidth = 512;
+    private int _bloomTextureWidth = 928;
 
     private PyramidBloomRendererSO.Pass _preFilterPass = PyramidBloomRendererSO.Pass.Prefilter4;
 

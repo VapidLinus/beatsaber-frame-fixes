@@ -22,7 +22,7 @@ internal sealed class OptionsException(string message) : Exception(message);
 internal sealed record Options(Command Command, HapticsSettings? Haptics, int? PauseDebounceMilliseconds, bool BloomSkipCopy, BloomBlurSettings? BloomBlur, string? GameDirectory)
 {
     public const int DefaultPauseDebounceMilliseconds = 250;
-    public const int DefaultBloomSongWidth = 256;
+    public const int DefaultBloomSongWidth = 464;
 
     public const string Usage = """
         Usage: beatsaber-frame-fixes [options]
@@ -54,10 +54,10 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
         Bloom:
           --bloom-skip-copy <on|off>   Skip the bloom's full-screen copy (default on)
           --bloom-song-width <px>      Width of the bloom blur while a song is playing
-                                       (default 256); 512 keeps the game's quality
+                                       (default 464); the game's own width is 928
           --bloom-width <px>           Width of the bloom blur in menus and pauses
-                                       (default 512, the game's). Narrower is cheaper
-                                       but makes the glow blockier
+                                       (default: the game's own, 928). Narrower is
+                                       cheaper but makes the glow blockier
 
         Other:
           --restore                    Put the original game files back
