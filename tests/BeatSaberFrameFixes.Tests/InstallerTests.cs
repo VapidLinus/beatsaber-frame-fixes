@@ -49,6 +49,16 @@ public sealed class InstallerTests : IDisposable
     }
 
     [Fact]
+    public void Busy_bloom_width_adds_the_note_hit_time_to_main()
+    {
+        CreateInstaller().Apply(DefaultHaptics, pauseDebounceMilliseconds: null, bloomSkipCopy: true, new BloomBlurSettings(Width: null, SongWidth: 464, BusyWidth: 256));
+
+        Assert.Equal("beatsaber-frame-fixes " + Program.Version + ": song playing flag, note hit time", ReadMarker("Main.dll"));
+        Assert.Contains("256 px for 1.5 s after a note hit", ReadMarker("Rendering.dll"));
+        Assert.Contains("tells the bloom when a song is playing and when notes are hit", _output.ToString());
+    }
+
+    [Fact]
     public void Skipping_the_bloom_fix_restores_rendering()
     {
         var originalRendering = File.ReadAllBytes(ManagedFile("Rendering.dll"));

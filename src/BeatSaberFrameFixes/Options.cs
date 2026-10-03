@@ -11,6 +11,17 @@ internal enum Command
     Version,
 }
 
+/// <summary>
+/// How the bloom blur width changes: <see cref="Full"/> keeps the game's width, <see cref="Song"/> uses one width for the
+/// whole song, and <see cref="Aggressive"/> also narrows it right after note hits.
+/// </summary>
+internal enum BloomMode
+{
+    Full,
+    Song,
+    Aggressive,
+}
+
 /// <summary>Thrown for invalid command-line arguments; the message is shown to the user.</summary>
 internal sealed class OptionsException(string message) : Exception(message);
 
@@ -23,6 +34,7 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
 {
     public const int DefaultPauseDebounceMilliseconds = 250;
     public const int DefaultBloomSongWidth = 464;
+    public const int DefaultBloomBusyWidth = 256;
 
     public const string Usage = """
         Usage: beatsaber-frame-fixes [options]
@@ -53,11 +65,20 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
 
         Bloom:
           --bloom-skip-copy <on|off>   Skip the bloom's full-screen copy (default on)
-          --bloom-song-width <px>      Width of the bloom blur while a song is playing
-                                       (default 464); the game's own width is 928
-          --bloom-width <px>           Width of the bloom blur in menus and pauses
-                                       (default: the game's own, 928). Narrower is
-                                       cheaper but makes the glow blockier
+          --bloom-mode <mode>          How the bloom blur width changes (default
+                                       aggressive). The game's own width is 928;
+                                       narrower is cheaper but makes the glow blockier.
+                                         full        the game's width everywhere
+                                         song        --bloom-song-width while a song
+                                                     is playing
+                                         aggressive  like song, and --bloom-busy-width
+                                                     right after note hits
+          --bloom-width <px>           Width in menus and pauses (default: the
+                                       game's own)
+          --bloom-song-width <px>      Width while a song is playing (default 464)
+          --bloom-busy-width <px>      Width right after a note hit (default 256)
+          --bloom-busy-delay <s>       Seconds after the last note hit until the song
+                                       width comes back (default 1.5)
 
         Other:
           --restore                    Put the original game files back
@@ -81,6 +102,10 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
         var pauseSettings = new List<string>();
         int? bloomWidth = null;
         int? bloomSongWidth = null;
+        int? bloomBusyWidth = null;
+        var bloomBusySeconds = BloomBlurPatch.DefaultBusySeconds;
+        var bloomMode = BloomMode.Aggressive;
+        var bloomSettings = new List<string>();
         string? gameDirectory = null;
 
         for (var i = 0; i < args.Length; i++)
@@ -104,8 +129,11 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
                 case "--pause-fix": pauseFix = ParseSwitch(name, Value()); break;
                 case "--pause-debounce": pauseSettings.Add(name); debounce = ParseNumber(name, Value(), max: 10000); break;
                 case "--bloom-skip-copy": skipCopy = ParseSwitch(name, Value()); break;
-                case "--bloom-width": bloomWidth = ParseNumber(name, Value(), min: BloomBlurPatch.MinWidth, max: BloomBlurPatch.MaxWidth); break;
-                case "--bloom-song-width": bloomSongWidth = ParseNumber(name, Value(), min: BloomBlurPatch.MinWidth, max: BloomBlurPatch.MaxWidth); break;
+                case "--bloom-mode": bloomMode = ParseBloomMode(name, Value()); break;
+                case "--bloom-width": bloomSettings.Add(name); bloomWidth = ParseNumber(name, Value(), min: BloomBlurPatch.MinWidth, max: BloomBlurPatch.MaxWidth); break;
+                case "--bloom-song-width": bloomSettings.Add(name); bloomSongWidth = ParseNumber(name, Value(), min: BloomBlurPatch.MinWidth, max: BloomBlurPatch.MaxWidth); break;
+                case "--bloom-busy-width": bloomSettings.Add(name); bloomBusyWidth = ParseNumber(name, Value(), min: BloomBlurPatch.MinWidth, max: BloomBlurPatch.MaxWidth); break;
+                case "--bloom-busy-delay": bloomSettings.Add(name); bloomBusySeconds = ParseSeconds(name, Value(), min: 0.1f, max: 10f); break;
                 case "--game-dir": gameDirectory = Value(); break;
                 case "--restore": command = Command.Restore; break;
                 case "--version": command = Command.Version; break;
@@ -114,7 +142,12 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
             }
         }
 
-        var bloomBlur = BloomBlurFor(bloomWidth, bloomSongWidth ?? DefaultBloomSongWidth);
+        var bloomBlur = bloomMode switch
+        {
+            BloomMode.Full => null,
+            BloomMode.Song => BloomBlurFor(bloomWidth, bloomSongWidth ?? DefaultBloomSongWidth, busyWidth: null, bloomBusySeconds),
+            _ => BloomBlurFor(bloomWidth, bloomSongWidth ?? DefaultBloomSongWidth, bloomBusyWidth ?? DefaultBloomBusyWidth, bloomBusySeconds),
+        };
         if (command == Command.Apply && !rumbleTweaks && !pauseFix && !skipCopy && bloomBlur is null)
             throw new OptionsException("Turning every fix off leaves nothing to do. Use --restore to undo the fixes.");
 
@@ -128,8 +161,9 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
         {
             Warnings =
             [
-                .. IgnoredWarning(rumbleTweaks ? [] : rumbleSettings, "--rumble-tweaks"),
-                .. IgnoredWarning(pauseFix ? [] : pauseSettings, "--pause-fix"),
+                .. IgnoredWarning(rumbleTweaks ? [] : rumbleSettings, "--rumble-tweaks is off"),
+                .. IgnoredWarning(pauseFix ? [] : pauseSettings, "--pause-fix is off"),
+                .. IgnoredWarning(bloomSettings.Where(setting => !UsedBy(bloomMode, setting)).ToList(), $"--bloom-mode is {bloomMode.ToString().ToLowerInvariant()}"),
             ],
         };
     }
@@ -137,18 +171,49 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
     /// <summary>Things worth telling the user that don't stop the run, such as settings ignored because their switch is off.</summary>
     public IReadOnlyList<string> Warnings { get; init; } = [];
 
-    private static IEnumerable<string> IgnoredWarning(List<string> settings, string switchName)
+    private static IEnumerable<string> IgnoredWarning(List<string> settings, string reason)
     {
         if (settings.Count > 0)
-            yield return $"{switchName} is off, so {string.Join(", ", settings.Distinct())} {(settings.Distinct().Count() == 1 ? "is" : "are")} ignored.";
+            yield return $"{reason}, so {string.Join(", ", settings.Distinct())} {(settings.Distinct().Count() == 1 ? "is" : "are")} ignored.";
     }
 
-    /// <summary>The blur settings, or null when they match the game. A song width is only kept when it is narrower than the width elsewhere.</summary>
-    private static BloomBlurSettings? BloomBlurFor(int? width, int? songWidth)
+    /// <summary>
+    /// The blur settings, or null when they match the game. A song width is only kept when it is narrower than the width
+    /// elsewhere, and a busy width only when it is narrower than the width used during songs.
+    /// </summary>
+    private static BloomBlurSettings? BloomBlurFor(int? width, int? songWidth, int? busyWidth, float busySeconds)
     {
-        if (songWidth >= (width ?? BloomBlurPatch.GameWidth))
+        var outsideSong = width ?? BloomBlurPatch.GameWidth;
+        if (songWidth >= outsideSong)
             songWidth = null;
-        return width is not null || songWidth is not null ? new BloomBlurSettings(width, songWidth) : null;
+        if (busyWidth >= (songWidth ?? outsideSong))
+            busyWidth = null;
+        return width is not null || songWidth is not null || busyWidth is not null
+            ? new BloomBlurSettings(width, songWidth, busyWidth, busyWidth is null ? BloomBlurPatch.DefaultBusySeconds : busySeconds)
+            : null;
+    }
+
+    /// <summary>Whether <paramref name="mode"/> uses the bloom setting with the given option name.</summary>
+    private static bool UsedBy(BloomMode mode, string setting) => mode switch
+    {
+        BloomMode.Full => false,
+        BloomMode.Song => setting is "--bloom-width" or "--bloom-song-width",
+        _ => true,
+    };
+
+    private static BloomMode ParseBloomMode(string name, string value) => value.ToLowerInvariant() switch
+    {
+        "full" => BloomMode.Full,
+        "song" => BloomMode.Song,
+        "aggressive" => BloomMode.Aggressive,
+        _ => throw new OptionsException($"{name} must be full, song or aggressive, not \"{value}\"."),
+    };
+
+    private static float ParseSeconds(string name, string value, float min, float max)
+    {
+        if (!float.TryParse(value, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var seconds) || seconds < min || seconds > max)
+            throw new OptionsException($"{name} must be a number of seconds from {min.ToString(CultureInfo.InvariantCulture)} to {max.ToString(CultureInfo.InvariantCulture)}, not \"{value}\".");
+        return seconds;
     }
 
     private static (string Name, string? Value) SplitArgument(string argument)

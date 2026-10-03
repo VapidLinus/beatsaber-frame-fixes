@@ -1,21 +1,27 @@
+using System.Globalization;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 
 namespace BeatSaberFrameFixes.Patches;
 
 /// <summary>
-/// Bloom blur widths in pixels: <see cref="Width"/> applies outside songs (null keeps the game's own width, 928 in 1.45) and
-/// <see cref="SongWidth"/> while a song is playing (null uses <see cref="Width"/>).
+/// Bloom blur widths in pixels: <see cref="Width"/> applies outside songs (null keeps the game's own width, 928 in 1.45),
+/// <see cref="SongWidth"/> while a song is playing (null uses <see cref="Width"/>) and <see cref="BusyWidth"/> during
+/// songs for <see cref="BusySeconds"/> after a note is cut (null uses the song width).
 /// </summary>
-internal sealed record BloomBlurSettings(int? Width, int? SongWidth)
+internal sealed record BloomBlurSettings(int? Width, int? SongWidth, int? BusyWidth = null, float BusySeconds = BloomBlurPatch.DefaultBusySeconds)
 {
-    public override string ToString() => (Width, SongWidth) switch
+    public override string ToString()
     {
-        ({ } w, { } s) => $"bloom blur {w} px wide, {s} px while a song plays",
-        ({ } w, null) => $"bloom blur {w} px wide",
-        (null, { } s) => $"bloom blur {s} px wide while a song plays",
-        _ => "game bloom blur",
-    };
+        var parts = new List<string>();
+        if (Width is { } width)
+            parts.Add($"{width} px wide");
+        if (SongWidth is { } song)
+            parts.Add(Width is null && BusyWidth is null ? $"{song} px wide while a song plays" : $"{song} px while a song plays");
+        if (BusyWidth is { } busy)
+            parts.Add($"{busy} px for {BusySeconds.ToString("0.##", CultureInfo.InvariantCulture)} s after a note hit");
+        return parts.Count == 0 ? "game bloom blur" : "bloom blur " + string.Join(", ", parts);
+    }
 }
 
 /// <summary>
@@ -23,7 +29,9 @@ internal sealed record BloomBlurSettings(int? Width, int? SongWidth)
 /// which the bloom pass reads every frame. The blur pyramid starts at this width and has one level fewer per halving,
 /// so a narrower texture is cheaper and drops the finest levels, which makes the glow coarser while its reach stays the
 /// same. With a song width, the getter returns it while the <see cref="SongPlayingFlagPatch.GlobalName"/> shader global
-/// is set. Whenever the current width is below <see cref="FinePrefilterBelowWidth"/>, the first pass, which samples the
+/// is set; with a busy width, it returns that instead during songs while the <see cref="NoteHitTimePatch.GlobalName"/>
+/// global is less than <see cref="BloomBlurSettings.BusySeconds"/> old. Whenever the current width is below
+/// <see cref="FinePrefilterBelowWidth"/>, the first pass, which samples the
 /// full-resolution image, uses the shader's 13-tap filter instead of the serialized 4-tap one, so thin bright lines are
 /// not missed.
 /// </summary>
@@ -43,11 +51,14 @@ internal static class BloomBlurPatch
     public const int MinWidth = 16;
     public const int MaxWidth = 2048;
 
+    /// <summary>Default seconds after a note cut during which the busy width applies.</summary>
+    public const float DefaultBusySeconds = 1.5f;
+
     /// <summary>Start of the Player.log line written when the width the bloom uses changes.</summary>
     public const string WidthLogText = "Bloom width now ";
 
     /// <summary>Width changes logged in full; after these only every 1000th change is logged.</summary>
-    public const int LoggedWidthChanges = 20;
+    public const int LoggedWidthChanges = 200;
 
     private const string PrefilterMethodName = "FrameFixesPrefilterPass";
     private const string NoteWidthMethodName = "FrameFixesNoteWidth";
@@ -122,14 +133,30 @@ internal static class BloomBlurPatch
 
         var il = getter.Body.GetILProcessor();
         getter.Body.Instructions.Clear();
+        var getGlobal = imports.Unity("UnityEngine.Shader", "GetGlobalFloat", "System.String");
         var outsideSong = settings.Width is { } width ? il.Create(OpCodes.Ldc_I4, width) : il.Create(OpCodes.Ldarg_0);
-        if (settings.SongWidth is { } songWidth)
+        var inSong = settings.SongWidth is { } songWidth ? il.Create(OpCodes.Ldc_I4, songWidth) : null;
+        if (inSong is not null || settings.BusyWidth is not null)
         {
             il.Emit(OpCodes.Ldstr, SongPlayingFlagPatch.GlobalName);
-            il.Emit(OpCodes.Call, imports.Unity("UnityEngine.Shader", "GetGlobalFloat", "System.String"));
+            il.Emit(OpCodes.Call, getGlobal);
             il.Emit(OpCodes.Ldc_R4, 0.5f);
             il.Emit(OpCodes.Ble_Un, outsideSong);
-            il.Emit(OpCodes.Ldc_I4, songWidth);
+        }
+        if (settings.BusyWidth is { } busyWidth)
+        {
+            il.Emit(OpCodes.Call, imports.Unity("UnityEngine.Time", "get_realtimeSinceStartup"));
+            il.Emit(OpCodes.Ldstr, NoteHitTimePatch.GlobalName);
+            il.Emit(OpCodes.Call, getGlobal);
+            il.Emit(OpCodes.Sub);
+            il.Emit(OpCodes.Ldc_R4, settings.BusySeconds);
+            il.Emit(OpCodes.Bge_Un, inSong ?? outsideSong);
+            il.Emit(OpCodes.Ldc_I4, busyWidth);
+            il.Emit(OpCodes.Ret);
+        }
+        if (inSong is not null)
+        {
+            il.Append(inSong);
             il.Emit(OpCodes.Ret);
         }
         il.Append(outsideSong);

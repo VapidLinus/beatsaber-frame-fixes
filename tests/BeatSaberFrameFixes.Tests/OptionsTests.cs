@@ -12,7 +12,7 @@ public class OptionsTests
         Assert.Equal(new HapticsSettings(60, 30, 60, 780), options.Haptics);
         Assert.Equal(250, options.PauseDebounceMilliseconds);
         Assert.True(options.BloomSkipCopy);
-        Assert.Equal(new BloomBlurSettings(null, SongWidth: 464), options.BloomBlur);
+        Assert.Equal(new BloomBlurSettings(null, SongWidth: 464, BusyWidth: 256), options.BloomBlur);
         Assert.Equal(Command.Apply, options.Command);
     }
 
@@ -92,16 +92,56 @@ public class OptionsTests
     [Fact]
     public void Bloom_blur_widths_can_be_set()
     {
-        Assert.Equal(new BloomBlurSettings(null, SongWidth: 384), Options.Parse(["--bloom-song-width", "384"]).BloomBlur);
-        Assert.Equal(new BloomBlurSettings(640, SongWidth: 464), Options.Parse(["--bloom-width", "640"]).BloomBlur);
+        Assert.Equal(new BloomBlurSettings(null, SongWidth: 384, BusyWidth: 256), Options.Parse(["--bloom-song-width", "384"]).BloomBlur);
+        Assert.Equal(new BloomBlurSettings(640, SongWidth: 464, BusyWidth: 256), Options.Parse(["--bloom-width", "640"]).BloomBlur);
     }
 
     [Theory]
     [InlineData("928")]
     [InlineData("1024")]
-    public void Song_width_of_the_game_width_or_wider_keeps_the_game_blur(string songWidth)
+    public void Song_mode_with_the_game_width_or_wider_keeps_the_game_blur(string songWidth)
     {
-        Assert.Null(Options.Parse(["--bloom-song-width", songWidth]).BloomBlur);
+        Assert.Null(Options.Parse(["--bloom-mode", "song", "--bloom-song-width", songWidth]).BloomBlur);
+    }
+
+    [Fact]
+    public void Bloom_mode_defaults_to_aggressive()
+    {
+        Assert.Equal(new BloomBlurSettings(null, SongWidth: 464, BusyWidth: 256, BusySeconds: 1.5f), Options.Parse([]).BloomBlur);
+        Assert.Equal(Options.Parse([]).BloomBlur, Options.Parse(["--bloom-mode", "aggressive"]).BloomBlur);
+    }
+
+    [Fact]
+    public void Song_mode_uses_one_width_for_the_whole_song()
+    {
+        Assert.Equal(new BloomBlurSettings(null, SongWidth: 464, BusyWidth: null), Options.Parse(["--bloom-mode", "song"]).BloomBlur);
+    }
+
+    [Fact]
+    public void Full_mode_keeps_the_game_blur()
+    {
+        Assert.Null(Options.Parse(["--bloom-mode", "full"]).BloomBlur);
+        Assert.Null(Options.Parse(["--bloom-mode=FULL"]).BloomBlur);
+    }
+
+    [Theory]
+    [InlineData("full", "--bloom-width", "512")]
+    [InlineData("full", "--bloom-song-width", "300")]
+    [InlineData("full", "--bloom-busy-delay", "1")]
+    [InlineData("song", "--bloom-busy-width", "128")]
+    [InlineData("song", "--bloom-busy-delay", "1")]
+    public void Widths_unused_by_the_bloom_mode_are_ignored_with_a_warning(string mode, string setting, string value)
+    {
+        var options = Options.Parse(["--bloom-mode", mode, setting, value]);
+
+        Assert.Equal(Options.Parse(["--bloom-mode", mode]).BloomBlur, options.BloomBlur);
+        Assert.Equal([$"--bloom-mode is {mode}, so {setting} is ignored."], options.Warnings);
+    }
+
+    [Fact]
+    public void Busy_delay_can_be_set()
+    {
+        Assert.Equal(new BloomBlurSettings(null, SongWidth: 464, BusyWidth: 256, BusySeconds: 0.8f), Options.Parse(["--bloom-busy-delay", "0.8"]).BloomBlur);
     }
 
     [Theory]
@@ -110,7 +150,20 @@ public class OptionsTests
     [InlineData(800)]
     public void Song_width_narrower_than_the_game_width_is_kept(int songWidth)
     {
-        Assert.Equal(new BloomBlurSettings(null, SongWidth: songWidth), Options.Parse(["--bloom-song-width", songWidth.ToString()]).BloomBlur);
+        Assert.Equal(new BloomBlurSettings(null, SongWidth: songWidth, BusyWidth: 256), Options.Parse(["--bloom-song-width", songWidth.ToString()]).BloomBlur);
+    }
+
+    [Fact]
+    public void Busy_width_can_be_set()
+    {
+        Assert.Equal(new BloomBlurSettings(null, SongWidth: 464, BusyWidth: 128), Options.Parse(["--bloom-busy-width", "128"]).BloomBlur);
+    }
+
+    [Fact]
+    public void Busy_width_not_narrower_than_the_song_width_is_dropped()
+    {
+        Assert.Equal(new BloomBlurSettings(null, SongWidth: 300, BusyWidth: null),
+            Options.Parse(["--bloom-song-width", "300", "--bloom-busy-width", "300"]).BloomBlur);
     }
 
     [Fact]
@@ -126,14 +179,14 @@ public class OptionsTests
         var options = Options.Parse(["--bloom-skip-copy", "off"]);
 
         Assert.False(options.BloomSkipCopy);
-        Assert.Equal(new BloomBlurSettings(null, SongWidth: 464), options.BloomBlur);
+        Assert.Equal(new BloomBlurSettings(null, SongWidth: 464, BusyWidth: 256), options.BloomBlur);
     }
 
     [Fact]
     public void Turning_everything_off_is_rejected()
     {
         Assert.Throws<OptionsException>(() => Options.Parse(
-            ["--rumble-tweaks", "off", "--pause-fix", "off", "--bloom-skip-copy", "off", "--bloom-song-width", "928"]));
+            ["--rumble-tweaks", "off", "--pause-fix", "off", "--bloom-skip-copy", "off", "--bloom-mode", "full"]));
     }
 
     [Theory]
@@ -159,6 +212,11 @@ public class OptionsTests
     [InlineData("--pause-debounce", "10001")]
     [InlineData("--bloom-width", "8")]
     [InlineData("--bloom-width", "4096")]
+    [InlineData("--bloom-busy-width", "8")]
+    [InlineData("--bloom-mode", "fast")]
+    [InlineData("--bloom-busy-delay", "abc")]
+    [InlineData("--bloom-busy-delay", "0")]
+    [InlineData("--bloom-busy-delay", "11")]
     [InlineData("--rumble-tweaks", "maybe")]
     [InlineData("--rumble-tweaks")]
     [InlineData("--no-haptics")]

@@ -79,6 +79,36 @@ public class BloomBlurPatchTests
     }
 
     [Fact]
+    public void Busy_width_applies_for_the_busy_delay_after_a_note_hit_during_songs()
+    {
+        var effect = new Effect(Patch(new BloomBlurSettings(Width: null, SongWidth: 464, BusyWidth: 256)));
+
+        Assert.Equal((464, "Prefilter13"), effect.Frame(songPlaying: true));
+        Assert.Equal((256, "Prefilter13"), effect.Frame(songPlaying: true, secondsSinceHit: 0.1f));
+        Assert.Equal((256, "Prefilter13"), effect.Frame(songPlaying: true, secondsSinceHit: 1.4f));
+        Assert.Equal((464, "Prefilter13"), effect.Frame(songPlaying: true, secondsSinceHit: 1.6f));
+        Assert.Equal((928, "Prefilter4"), effect.Frame(songPlaying: false, secondsSinceHit: 0.1f));
+    }
+
+    [Fact]
+    public void Busy_delay_comes_from_the_settings()
+    {
+        var effect = new Effect(Patch(new BloomBlurSettings(Width: null, SongWidth: 464, BusyWidth: 256, BusySeconds: 0.5f)));
+
+        Assert.Equal((256, "Prefilter13"), effect.Frame(songPlaying: true, secondsSinceHit: 0.4f));
+        Assert.Equal((464, "Prefilter13"), effect.Frame(songPlaying: true, secondsSinceHit: 0.6f));
+    }
+
+    [Fact]
+    public void Busy_width_works_without_a_song_width()
+    {
+        var effect = new Effect(Patch(new BloomBlurSettings(Width: null, SongWidth: null, BusyWidth: 256)));
+
+        Assert.Equal((256, "Prefilter13"), effect.Frame(songPlaying: true, secondsSinceHit: 0.5f));
+        Assert.Equal((928, "Prefilter4"), effect.Frame(songPlaying: true, secondsSinceHit: 5f));
+    }
+
+    [Fact]
     public void Width_changes_are_logged()
     {
         var effect = new Effect(Patch(new BloomBlurSettings(Width: null, SongWidth: 464)));
@@ -96,16 +126,16 @@ public class BloomBlurPatchTests
     }
 
     [Fact]
-    public void Flickering_width_logs_the_first_20_changes_only()
+    public void Flickering_width_logs_the_first_200_changes_only()
     {
         var effect = new Effect(Patch(new BloomBlurSettings(Width: null, SongWidth: 464)));
         UnityEngine.Debug.Messages.Clear();
 
-        for (var frame = 0; frame < 60; frame++)
+        for (var frame = 0; frame < 600; frame++)
             effect.Frame(songPlaying: frame % 2 == 0);
 
-        Assert.Equal(20, WidthMessages().Count);
-        Assert.Equal("Bloom width now 928 px (change 20)", WidthMessages()[^1]);
+        Assert.Equal(BloomBlurPatch.LoggedWidthChanges, WidthMessages().Count);
+        Assert.Equal("Bloom width now 928 px (change 200)", WidthMessages()[^1]);
     }
 
     [Fact]
@@ -123,6 +153,8 @@ public class BloomBlurPatchTests
         Assert.Equal("bloom blur 256 px wide", new BloomBlurSettings(256, null).ToString());
         Assert.Equal("bloom blur 256 px wide while a song plays", new BloomBlurSettings(null, 256).ToString());
         Assert.Equal("bloom blur 384 px wide, 256 px while a song plays", new BloomBlurSettings(384, 256).ToString());
+        Assert.Equal("bloom blur 464 px while a song plays, 256 px for 1.5 s after a note hit", new BloomBlurSettings(null, 464, 256).ToString());
+        Assert.Equal("bloom blur 464 px while a song plays, 256 px for 0.8 s after a note hit", new BloomBlurSettings(null, 464, 256, 0.8f).ToString());
     }
 
     private static List<string> WidthMessages() =>
@@ -140,10 +172,15 @@ public class BloomBlurPatchTests
         private readonly object _effect = Activator.CreateInstance(rendering.GetType("PyramidBloomMainEffectSO", throwOnError: true)!)!;
         private readonly Type _renderer = rendering.GetType("PyramidBloomRendererSO", throwOnError: true)!;
 
-        /// <summary>Renders one frame with the song flag set as given; returns the blur width and the prefilter pass used.</summary>
-        public (int Width, string Prefilter) Frame(bool songPlaying)
+        /// <summary>
+        /// Renders one frame with the song flag set as given and the last note hit <paramref name="secondsSinceHit"/>
+        /// seconds ago; returns the blur width and the prefilter pass used.
+        /// </summary>
+        public (int Width, string Prefilter) Frame(bool songPlaying, float secondsSinceHit = 1000f)
         {
             Shader.SetGlobalFloat(SongPlayingFlagPatch.GlobalName, songPlaying ? 1f : 0f);
+            Time.realtimeSinceStartup = 5000f;
+            Shader.SetGlobalFloat(NoteHitTimePatch.GlobalName, 5000f - secondsSinceHit);
             Blitter.Blits.Clear();
             var width = (int)_effect.GetType().GetProperty("bloomTextureWidth")!.GetValue(_effect)!;
             _effect.GetType().GetMethod("Render")!.Invoke(_effect, [new CommandBuffer(), new TextureHandle(1), new TextureHandle(2), new TextureHandle(3), Array.Empty<TextureHandle>(), 1f]);

@@ -29,7 +29,8 @@ internal sealed class Installer(GameInstall game, string backupRoot, TextWriter 
     /// <param name="bloomBlur">Bloom blur widths, or null to keep the game's blur.</param>
     public void Apply(HapticsSettings? haptics, int? pauseDebounceMilliseconds, bool bloomSkipCopy, BloomBlurSettings? bloomBlur = null)
     {
-        var songFlag = bloomBlur?.SongWidth is not null;
+        var noteHitTime = bloomBlur?.BusyWidth is not null;
+        var songFlag = bloomBlur?.SongWidth is not null || noteHitTime;
         var fixes = new[]
         {
             new Fix(HapticsPatch.FileName, "Rumble tweaks",
@@ -37,10 +38,12 @@ internal sealed class Installer(GameInstall game, string backupRoot, TextWriter 
                 $"hits {haptics?.HitStrengthPercent}% strength and {haptics?.HitDurationPercent}% length, other rumble {haptics?.OtherStrengthPercent}% and {haptics?.OtherDurationPercent}%",
                 $"rumble {haptics}"),
             new Fix(PauseDebouncePatch.FileName, pauseDebounceMilliseconds is null ? "Song detection" : "Pause fix",
-                pauseDebounceMilliseconds is null && !songFlag ? null : m => PatchMain(m, pauseDebounceMilliseconds, songFlag),
+                pauseDebounceMilliseconds is null && !songFlag ? null : m => PatchMain(m, pauseDebounceMilliseconds, songFlag, noteHitTime),
                 Describe(pauseDebounceMilliseconds is { } shown ? $"pauses only after focus or presence is lost for {shown} ms" : null,
-                    songFlag ? "tells the bloom when a song is playing" : null),
-                Describe(pauseDebounceMilliseconds is { } marked ? $"pause debounce {marked} ms" : null, songFlag ? "song playing flag" : null)),
+                    noteHitTime ? "tells the bloom when a song is playing and when notes are hit"
+                    : songFlag ? "tells the bloom when a song is playing" : null),
+                Describe(pauseDebounceMilliseconds is { } marked ? $"pause debounce {marked} ms" : null, songFlag ? "song playing flag" : null,
+                    noteHitTime ? "note hit time" : null)),
             new Fix(BloomCopyPatch.FileName, "Bloom fix",
                 bloomSkipCopy || bloomBlur is not null ? m => PatchBloom(m, bloomSkipCopy, bloomBlur) : null,
                 Describe(bloomSkipCopy ? "bloom skips a full-screen copy" : null, bloomBlur?.ToString()),
@@ -74,12 +77,14 @@ internal sealed class Installer(GameInstall game, string backupRoot, TextWriter 
             output.WriteLine(change.Message);
     }
 
-    private static void PatchMain(ModuleDefinition module, int? pauseDebounceMilliseconds, bool songFlag)
+    private static void PatchMain(ModuleDefinition module, int? pauseDebounceMilliseconds, bool songFlag, bool noteHitTime)
     {
         if (pauseDebounceMilliseconds is { } ms)
             PauseDebouncePatch.Apply(module, ms);
         if (songFlag)
             SongPlayingFlagPatch.Apply(module);
+        if (noteHitTime)
+            NoteHitTimePatch.Apply(module);
     }
 
     private static void PatchBloom(ModuleDefinition module, bool skipCopy, BloomBlurSettings? blur)
