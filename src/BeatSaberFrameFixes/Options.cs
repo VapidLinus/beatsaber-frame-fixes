@@ -12,11 +12,13 @@ internal enum Command
 }
 
 /// <summary>
-/// How the bloom blur width changes: <see cref="Full"/> keeps the game's width, <see cref="Song"/> uses one width for the
-/// whole song, and <see cref="Aggressive"/> also narrows it right after note hits.
+/// How the bloom blur width changes: <see cref="Off"/> keeps the game's width, <see cref="Full"/> uses one width
+/// everywhere, <see cref="Song"/> uses another width while a song plays, and <see cref="Aggressive"/> also narrows it
+/// right after note hits.
 /// </summary>
 internal enum BloomMode
 {
+    Off,
     Full,
     Song,
     Aggressive,
@@ -48,13 +50,13 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
           --rumble-tweaks <on|off>     Apply the rumble settings below (default on);
                                        off keeps the game's own rumble
           --hit-strength <percent>     Rumble strength for note hits, bad cuts, bombs
-                                       and chains (default 60)
+                                       and chains (default 40)
           --other-strength <percent>   Rumble strength for arcs, walls, saber clashes
-                                       and menu clicks (default 30)
+                                       and menu clicks (default 20)
           --hit-duration <percent>     Rumble length for note hits, bad cuts, bombs
-                                       and chains (default 60)
+                                       and chains (default 65)
           --other-duration <percent>   Rumble length for menu clicks; arcs, walls and
-                                       saber clashes last while touching (default 780)
+                                       saber clashes last while touching (default 100)
           --duration <percent>         Sets both lengths at once
 
         Pausing:
@@ -68,13 +70,15 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
           --bloom-mode <mode>          How the bloom blur width changes (default
                                        aggressive). The game's own width is 928;
                                        narrower is cheaper but makes the glow blockier.
-                                         full        the game's width everywhere
-                                         song        --bloom-song-width while a song
+                                         off         the game's width everywhere
+                                         full        --bloom-width everywhere
+                                         song        --bloom-width, and
+                                                     --bloom-song-width while a song
                                                      is playing
                                          aggressive  like song, and --bloom-busy-width
                                                      right after note hits
-          --bloom-width <px>           Width in menus and pauses (default: the
-                                       game's own)
+          --bloom-width <px>           Width in menus and pauses, and everywhere in
+                                       full mode (default: the game's own)
           --bloom-song-width <px>      Width while a song is playing (default 464)
           --bloom-busy-width <px>      Width right after a note hit (default 256)
           --bloom-busy-delay <s>       Seconds after the last note hit until the song
@@ -144,7 +148,8 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
 
         var bloomBlur = bloomMode switch
         {
-            BloomMode.Full => null,
+            BloomMode.Off => null,
+            BloomMode.Full => BloomBlurFor(bloomWidth, songWidth: null, busyWidth: null, bloomBusySeconds),
             BloomMode.Song => BloomBlurFor(bloomWidth, bloomSongWidth ?? DefaultBloomSongWidth, busyWidth: null, bloomBusySeconds),
             _ => BloomBlurFor(bloomWidth, bloomSongWidth ?? DefaultBloomSongWidth, bloomBusyWidth ?? DefaultBloomBusyWidth, bloomBusySeconds),
         };
@@ -196,17 +201,19 @@ internal sealed record Options(Command Command, HapticsSettings? Haptics, int? P
     /// <summary>Whether <paramref name="mode"/> uses the bloom setting with the given option name.</summary>
     private static bool UsedBy(BloomMode mode, string setting) => mode switch
     {
-        BloomMode.Full => false,
+        BloomMode.Off => false,
+        BloomMode.Full => setting is "--bloom-width",
         BloomMode.Song => setting is "--bloom-width" or "--bloom-song-width",
         _ => true,
     };
 
     private static BloomMode ParseBloomMode(string name, string value) => value.ToLowerInvariant() switch
     {
+        "off" => BloomMode.Off,
         "full" => BloomMode.Full,
         "song" => BloomMode.Song,
         "aggressive" => BloomMode.Aggressive,
-        _ => throw new OptionsException($"{name} must be full, song or aggressive, not \"{value}\"."),
+        _ => throw new OptionsException($"{name} must be off, full, song or aggressive, not \"{value}\"."),
     };
 
     private static float ParseSeconds(string name, string value, float min, float max)

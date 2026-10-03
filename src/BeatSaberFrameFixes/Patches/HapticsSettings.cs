@@ -6,7 +6,7 @@ namespace BeatSaberFrameFixes.Patches;
 /// </summary>
 internal sealed record HapticsSettings(int HitStrengthPercent, int OtherStrengthPercent, int HitDurationPercent, int OtherDurationPercent)
 {
-    public static HapticsSettings Default { get; } = new(60, 30, 60, 780);
+    public static HapticsSettings Default { get; } = new(40, 20, 65, 100);
 
     public override string ToString() =>
         $"hit {HitStrengthPercent}% x {HitDurationPercent}% length, other {OtherStrengthPercent}% x {OtherDurationPercent}% length";

@@ -9,7 +9,7 @@ public class OptionsTests
     {
         var options = Options.Parse([]);
 
-        Assert.Equal(new HapticsSettings(60, 30, 60, 780), options.Haptics);
+        Assert.Equal(new HapticsSettings(40, 20, 65, 100), options.Haptics);
         Assert.Equal(250, options.PauseDebounceMilliseconds);
         Assert.True(options.BloomSkipCopy);
         Assert.Equal(new BloomBlurSettings(null, SongWidth: 464, BusyWidth: 256), options.BloomBlur);
@@ -28,7 +28,7 @@ public class OptionsTests
     [Fact]
     public void Duration_sets_both_durations()
     {
-        Assert.Equal(new HapticsSettings(60, 30, 45, 45), Options.Parse(["--duration", "45"]).Haptics);
+        Assert.Equal(new HapticsSettings(40, 20, 45, 45), Options.Parse(["--duration", "45"]).Haptics);
     }
 
     [Fact]
@@ -118,15 +118,29 @@ public class OptionsTests
     }
 
     [Fact]
-    public void Full_mode_keeps_the_game_blur()
+    public void Off_mode_keeps_the_game_blur()
+    {
+        Assert.Null(Options.Parse(["--bloom-mode", "off"]).BloomBlur);
+        Assert.Null(Options.Parse(["--bloom-mode=OFF"]).BloomBlur);
+    }
+
+    [Fact]
+    public void Full_mode_uses_the_bloom_width_everywhere()
     {
         Assert.Null(Options.Parse(["--bloom-mode", "full"]).BloomBlur);
-        Assert.Null(Options.Parse(["--bloom-mode=FULL"]).BloomBlur);
+
+        var options = Options.Parse(["--bloom-mode", "full", "--bloom-width", "464"]);
+
+        Assert.Equal(new BloomBlurSettings(464, SongWidth: null), options.BloomBlur);
+        Assert.Empty(options.Warnings);
     }
 
     [Theory]
-    [InlineData("full", "--bloom-width", "512")]
+    [InlineData("off", "--bloom-width", "512")]
+    [InlineData("off", "--bloom-song-width", "300")]
+    [InlineData("off", "--bloom-busy-delay", "1")]
     [InlineData("full", "--bloom-song-width", "300")]
+    [InlineData("full", "--bloom-busy-width", "128")]
     [InlineData("full", "--bloom-busy-delay", "1")]
     [InlineData("song", "--bloom-busy-width", "128")]
     [InlineData("song", "--bloom-busy-delay", "1")]
@@ -186,7 +200,7 @@ public class OptionsTests
     public void Turning_everything_off_is_rejected()
     {
         Assert.Throws<OptionsException>(() => Options.Parse(
-            ["--rumble-tweaks", "off", "--pause-fix", "off", "--bloom-skip-copy", "off", "--bloom-mode", "full"]));
+            ["--rumble-tweaks", "off", "--pause-fix", "off", "--bloom-skip-copy", "off", "--bloom-mode", "off"]));
     }
 
     [Theory]
