@@ -22,6 +22,9 @@ internal static class Program
                     return 0;
             }
 
+            foreach (var warning in options.Warnings)
+                Console.WriteLine($"Note: {warning}");
+
             var game = FindGame(options.GameDirectory);
             Console.WriteLine($"Found Beat Saber {game.DisplayVersion} at {game.Directory}");
             if (GameProcess.IsRunning())
@@ -31,7 +34,7 @@ internal static class Program
             if (options.Command == Command.Restore)
                 installer.Restore();
             else
-                installer.Apply(options.Haptics, options.PauseDebounceMilliseconds, options.BloomFix, options.BloomWidth);
+                installer.Apply(options.Haptics, options.PauseDebounceMilliseconds, options.BloomSkipCopy, options.BloomBlur);
 
             Console.WriteLine("Done! You can start Beat Saber now.");
             return 0;

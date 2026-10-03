@@ -29,7 +29,7 @@ public sealed class InstallerTests : IDisposable
         var originalHaptics = File.ReadAllBytes(ManagedFile("BeatSaber.Haptics.dll"));
         var originalRendering = File.ReadAllBytes(ManagedFile("Rendering.dll"));
 
-        CreateInstaller().Apply(DefaultHaptics, pauseDebounceMilliseconds: 250, bloomFix: true);
+        CreateInstaller().Apply(DefaultHaptics, pauseDebounceMilliseconds: 250, bloomSkipCopy: true);
 
         Assert.Contains("hit 60%", ReadMarker("BeatSaber.Haptics.dll"));
         Assert.Contains("250 ms", ReadMarker("Main.dll"));
@@ -40,12 +40,21 @@ public sealed class InstallerTests : IDisposable
     }
 
     [Fact]
+    public void Song_bloom_width_adds_the_song_flag_to_main_even_without_the_pause_fix()
+    {
+        CreateInstaller().Apply(DefaultHaptics, pauseDebounceMilliseconds: null, bloomSkipCopy: true, new BloomBlurSettings(Width: null, SongWidth: 256));
+
+        Assert.Equal("beatsaber-frame-fixes " + Program.Version + ": song playing flag", ReadMarker("Main.dll"));
+        Assert.Contains("256 px wide while a song plays", ReadMarker("Rendering.dll"));
+    }
+
+    [Fact]
     public void Skipping_the_bloom_fix_restores_rendering()
     {
         var originalRendering = File.ReadAllBytes(ManagedFile("Rendering.dll"));
-        CreateInstaller().Apply(DefaultHaptics, 250, bloomFix: true);
+        CreateInstaller().Apply(DefaultHaptics, 250, bloomSkipCopy: true);
 
-        CreateInstaller().Apply(DefaultHaptics, 250, bloomFix: false);
+        CreateInstaller().Apply(DefaultHaptics, 250, bloomSkipCopy: false);
 
         Assert.Equal(originalRendering, File.ReadAllBytes(ManagedFile("Rendering.dll")));
         Assert.Contains("Bloom fix removed", _output.ToString());
@@ -54,9 +63,9 @@ public sealed class InstallerTests : IDisposable
     [Fact]
     public void Reapplying_patches_from_the_backup_instead_of_stacking()
     {
-        CreateInstaller().Apply(DefaultHaptics, 250, bloomFix: true);
+        CreateInstaller().Apply(DefaultHaptics, 250, bloomSkipCopy: true);
 
-        CreateInstaller().Apply(new HapticsSettings(80, 40, 50, 100), 500, bloomFix: true);
+        CreateInstaller().Apply(new HapticsSettings(80, 40, 50, 100), 500, bloomSkipCopy: true);
 
         Assert.Contains("hit 80%", ReadMarker("BeatSaber.Haptics.dll"));
         Assert.Contains("500 ms", ReadMarker("Main.dll"));
@@ -68,9 +77,9 @@ public sealed class InstallerTests : IDisposable
     public void Skipping_a_fix_restores_that_file()
     {
         var originalHaptics = File.ReadAllBytes(ManagedFile("BeatSaber.Haptics.dll"));
-        CreateInstaller().Apply(DefaultHaptics, 250, bloomFix: true);
+        CreateInstaller().Apply(DefaultHaptics, 250, bloomSkipCopy: true);
 
-        CreateInstaller().Apply(haptics: null, pauseDebounceMilliseconds: 250, bloomFix: true);
+        CreateInstaller().Apply(haptics: null, pauseDebounceMilliseconds: 250, bloomSkipCopy: true);
 
         Assert.Equal(originalHaptics, File.ReadAllBytes(ManagedFile("BeatSaber.Haptics.dll")));
         Assert.NotNull(ReadMarker("Main.dll"));
@@ -81,7 +90,7 @@ public sealed class InstallerTests : IDisposable
     {
         var originalMain = File.ReadAllBytes(ManagedFile("Main.dll"));
         var originalHaptics = File.ReadAllBytes(ManagedFile("BeatSaber.Haptics.dll"));
-        CreateInstaller().Apply(DefaultHaptics, 250, bloomFix: true);
+        CreateInstaller().Apply(DefaultHaptics, 250, bloomSkipCopy: true);
 
         CreateInstaller().Restore();
 
@@ -107,7 +116,7 @@ public sealed class InstallerTests : IDisposable
         var mainBefore = File.ReadAllBytes(ManagedFile("Main.dll"));
         var hapticsBefore = File.ReadAllBytes(ManagedFile("BeatSaber.Haptics.dll"));
 
-        var error = Assert.Throws<InstallerException>(() => CreateInstaller().Apply(DefaultHaptics, 250, bloomFix: true));
+        var error = Assert.Throws<InstallerException>(() => CreateInstaller().Apply(DefaultHaptics, 250, bloomSkipCopy: true));
 
         Assert.Contains("Nothing was changed", error.Message);
         Assert.Equal(mainBefore, File.ReadAllBytes(ManagedFile("Main.dll")));
@@ -118,10 +127,10 @@ public sealed class InstallerTests : IDisposable
     [Fact]
     public void A_patched_file_without_a_backup_is_refused()
     {
-        CreateInstaller().Apply(DefaultHaptics, 250, bloomFix: true);
+        CreateInstaller().Apply(DefaultHaptics, 250, bloomSkipCopy: true);
         Directory.Delete(BackupRoot, recursive: true);
 
-        var error = Assert.Throws<InstallerException>(() => CreateInstaller().Apply(DefaultHaptics, 250, bloomFix: true));
+        var error = Assert.Throws<InstallerException>(() => CreateInstaller().Apply(DefaultHaptics, 250, bloomSkipCopy: true));
 
         Assert.Contains("Verify integrity", error.Message);
     }
@@ -129,10 +138,10 @@ public sealed class InstallerTests : IDisposable
     [Fact]
     public void A_game_update_backs_up_and_restores_the_new_originals()
     {
-        CreateInstaller().Apply(DefaultHaptics, 250, bloomFix: true);
+        CreateInstaller().Apply(DefaultHaptics, 250, bloomSkipCopy: true);
         var updatedMain = SimulateGameUpdate("Main.dll");
 
-        CreateInstaller().Apply(DefaultHaptics, 250, bloomFix: true);
+        CreateInstaller().Apply(DefaultHaptics, 250, bloomSkipCopy: true);
         Assert.NotNull(ReadMarker("Main.dll"));
         CreateInstaller().Restore();
 
@@ -143,7 +152,7 @@ public sealed class InstallerTests : IDisposable
     public void A_changed_version_file_does_not_affect_restoring()
     {
         var originalMain = File.ReadAllBytes(ManagedFile("Main.dll"));
-        CreateInstaller().Apply(DefaultHaptics, 250, bloomFix: true);
+        CreateInstaller().Apply(DefaultHaptics, 250, bloomSkipCopy: true);
 
         new Installer(_game with { Version = "1.45.2_28848" }, BackupRoot, _output).Restore();
 

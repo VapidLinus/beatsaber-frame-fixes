@@ -4,7 +4,7 @@ Three small fixes for Beat Saber on the Steam Frame:
 
 - **No more random pauses.** The Frame sometimes thinks you took the headset off for a split second, and Beat Saber pauses. Now it only pauses if the headset is actually off.
 - **Gentler rumble.** Shorter and softer, with note hits still a bit stronger than the rest.
-- **Lighter bloom.** The glow effect skips one full-screen copy every frame. It looks exactly the same.
+- **Lighter bloom.** The glow effect skips a full-screen copy every frame, and while a song is playing it uses a slightly coarser glow that's hard to notice in action. Menus and pauses keep full quality.
 
 Your original game files are backed up, and you can undo everything with one command.
 
@@ -47,24 +47,27 @@ curl -fsSL https://raw.githubusercontent.com/VapidLinus/beatsaber-frame-fixes/ma
 
 | Option | Default | |
 |---|---|---|
+| `--rumble-tweaks` | on | `off` keeps the game's own rumble |
 | `--hit-strength` | 60 | % strength for hits, bad cuts, bombs and chains |
 | `--other-strength` | 30 | % strength for everything else |
 | `--hit-duration` | 60 | % length for hits, bad cuts, bombs and chains |
 | `--other-duration` | 780 | % length for menu clicks (the rest lasts while touching) |
+| `--pause-fix` | on | `off` keeps the game's own pausing |
 | `--pause-debounce` | 250 | ms the headset has to be "off" before the game pauses |
-| `--bloom-width` | 512 | px width of the image the glow is blurred on. Lower is cheaper but the glow gets blocky |
-| `--no-haptics`, `--no-pause-fix`, `--no-bloom-fix` | | skip one of the fixes |
+| `--bloom-skip-copy` | on | `off` keeps the game's full-screen copy |
+| `--bloom-song-width` | 256 | px width of the image the glow is blurred on while a song plays. 512 is full quality |
+| `--bloom-width` | 512 | the same for menus and pauses. Lower is cheaper but the glow gets blocky |
 | `--restore` | | undo everything |
 
-Strength can't go above 1.0, so hits can only get weaker. Running it again always starts from the original files, so settings don't stack.
+Switches take `on` or `off`. With a switch off, its settings are ignored, so you can keep them in your command and just flip the switch. Strength can't go above 1.0, so hits can only get weaker. Running it again always starts from the original files, so settings don't stack.
 
 ## How it works
 
 The script downloads a small patcher (built from this repo by GitHub Actions), checks its checksum and runs it. The patcher edits three of the game's files with [Mono.Cecil](https://github.com/jbevain/cecil):
 
 - `BeatSaber.Haptics.dll`: scales strength and length in the one place all rumble goes through.
-- `Main.dll`: instead of pausing right away when the headset reports "off", waits 250 ms and only pauses if it's still off. Skipped blips are logged to Beat Saber's `Player.log`.
-- `Rendering.dll`: the bloom used to copy the whole image and blend the glow from that copy back. Now it blends straight into the spare image and uses that as the new one, like Unity's own effects do.
+- `Main.dll`: instead of pausing right away when the headset reports "off", waits 250 ms and only pauses if it's still off. Skipped blips are logged to Beat Saber's `Player.log`. It also tells the bloom when a song is playing.
+- `Rendering.dll`: the bloom used to copy the whole image and blend the glow from that copy back. Now it blends straight into the spare image and uses that as the new one, like Unity's own effects do. During songs it blurs a 256 px wide image instead of 512, with a finer sampling filter so thin sabers don't flicker.
 
 It checks the game code looks as expected before touching anything, and backs up the originals to `~/.local/share/beatsaber-frame-fixes/backup`. It should also work on a Steam Deck or Linux PC.
 

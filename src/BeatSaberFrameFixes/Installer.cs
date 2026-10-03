@@ -26,23 +26,25 @@ internal sealed class Installer(GameInstall game, string backupRoot, TextWriter 
     public static string BackupFileName(string fileName, string sha256) =>
         $"{Path.GetFileNameWithoutExtension(fileName)}-{sha256}{Path.GetExtension(fileName)}";
 
-    /// <param name="bloomWidth">Bloom blur texture width in pixels, or null to keep the game's.</param>
-    public void Apply(HapticsSettings? haptics, int? pauseDebounceMilliseconds, bool bloomFix, int? bloomWidth = null)
+    /// <param name="bloomBlur">Bloom blur widths, or null to keep the game's blur.</param>
+    public void Apply(HapticsSettings? haptics, int? pauseDebounceMilliseconds, bool bloomSkipCopy, BloomBlurSettings? bloomBlur = null)
     {
+        var songFlag = bloomBlur?.SongWidth is not null;
         var fixes = new[]
         {
-            new Fix(HapticsPatch.FileName, "Rumble fix",
+            new Fix(HapticsPatch.FileName, "Rumble tweaks",
                 haptics is null ? null : m => HapticsPatch.Apply(m, haptics),
                 $"hits {haptics?.HitStrengthPercent}% strength and {haptics?.HitDurationPercent}% length, other rumble {haptics?.OtherStrengthPercent}% and {haptics?.OtherDurationPercent}%",
                 $"rumble {haptics}"),
-            new Fix(PauseDebouncePatch.FileName, "Pause fix",
-                pauseDebounceMilliseconds is not { } ms ? null : m => PauseDebouncePatch.Apply(m, ms),
-                $"pauses only after focus or presence is lost for {pauseDebounceMilliseconds} ms",
-                $"pause debounce {pauseDebounceMilliseconds} ms"),
+            new Fix(PauseDebouncePatch.FileName, pauseDebounceMilliseconds is null ? "Song detection" : "Pause fix",
+                pauseDebounceMilliseconds is null && !songFlag ? null : m => PatchMain(m, pauseDebounceMilliseconds, songFlag),
+                Describe(pauseDebounceMilliseconds is { } shown ? $"pauses only after focus or presence is lost for {shown} ms" : null,
+                    songFlag ? "tells the bloom when a song is playing" : null),
+                Describe(pauseDebounceMilliseconds is { } marked ? $"pause debounce {marked} ms" : null, songFlag ? "song playing flag" : null)),
             new Fix(BloomCopyPatch.FileName, "Bloom fix",
-                bloomFix || bloomWidth is not null ? m => PatchBloom(m, bloomFix, bloomWidth) : null,
-                BloomDescription(bloomFix, bloomWidth, "bloom skips a full-screen copy"),
-                BloomDescription(bloomFix, bloomWidth, "bloom without the full-screen copy")),
+                bloomSkipCopy || bloomBlur is not null ? m => PatchBloom(m, bloomSkipCopy, bloomBlur) : null,
+                Describe(bloomSkipCopy ? "bloom skips a full-screen copy" : null, bloomBlur?.ToString()),
+                Describe(bloomSkipCopy ? "bloom without the full-screen copy" : null, bloomBlur?.ToString())),
         };
 
         var changes = fixes.Select(Prepare).OfType<FileChange>().ToList();
@@ -72,16 +74,23 @@ internal sealed class Installer(GameInstall game, string backupRoot, TextWriter 
             output.WriteLine(change.Message);
     }
 
-    private static void PatchBloom(ModuleDefinition module, bool skipCopy, int? width)
+    private static void PatchMain(ModuleDefinition module, int? pauseDebounceMilliseconds, bool songFlag)
+    {
+        if (pauseDebounceMilliseconds is { } ms)
+            PauseDebouncePatch.Apply(module, ms);
+        if (songFlag)
+            SongPlayingFlagPatch.Apply(module);
+    }
+
+    private static void PatchBloom(ModuleDefinition module, bool skipCopy, BloomBlurSettings? blur)
     {
         if (skipCopy)
             BloomCopyPatch.Apply(module);
-        if (width is { } pixels)
-            BloomBlurPatch.Apply(module, pixels);
+        if (blur is not null)
+            BloomBlurPatch.Apply(module, blur);
     }
 
-    private static string BloomDescription(bool skipCopy, int? width, string copyText) =>
-        string.Join(", ", new[] { skipCopy ? copyText : null, width is { } w ? BloomBlurPatch.Describe(w) : null }.OfType<string>());
+    private static string Describe(params string?[] parts) => string.Join(", ", parts.OfType<string>());
 
     private FileChange? Prepare(Fix fix)
     {

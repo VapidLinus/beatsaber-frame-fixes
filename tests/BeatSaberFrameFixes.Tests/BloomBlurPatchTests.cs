@@ -1,5 +1,6 @@
 using System.Reflection;
 using BeatSaberFrameFixes.Patches;
+using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
 
@@ -13,17 +14,16 @@ public class BloomBlurPatchTests
     {
         var effect = new Effect(StandIns.PatchAndLoad(StandIns.RenderingPath, _ => { }));
 
-        Assert.Equal(512, effect.Width);
-        Assert.Equal("Prefilter4", effect.RenderedPrefilter());
+        Assert.Equal((512, "Prefilter4"), effect.Frame(songPlaying: false));
     }
 
     [Fact]
     public void Narrower_width_also_switches_to_the_13_tap_prefilter()
     {
-        var effect = new Effect(Patch(256));
+        var effect = new Effect(Patch(new BloomBlurSettings(256, SongWidth: null)));
 
-        Assert.Equal(256, effect.Width);
-        Assert.Equal("Prefilter13", effect.RenderedPrefilter());
+        Assert.Equal((256, "Prefilter13"), effect.Frame(songPlaying: false));
+        Assert.Equal((256, "Prefilter13"), effect.Frame(songPlaying: true));
     }
 
     [Theory]
@@ -31,43 +31,61 @@ public class BloomBlurPatchTests
     [InlineData(1024)]
     public void Game_width_or_wider_keeps_the_4_tap_prefilter(int width)
     {
-        var effect = new Effect(Patch(width));
+        var effect = new Effect(Patch(new BloomBlurSettings(width, SongWidth: null)));
 
-        Assert.Equal(width, effect.Width);
-        Assert.Equal("Prefilter4", effect.RenderedPrefilter());
+        Assert.Equal((width, "Prefilter4"), effect.Frame(songPlaying: false));
     }
 
     [Fact]
-    public void Blur_width_and_copy_fix_can_be_combined()
+    public void Song_width_applies_only_while_a_song_plays()
+    {
+        var effect = new Effect(Patch(new BloomBlurSettings(Width: null, SongWidth: 256)));
+
+        Assert.Equal((512, "Prefilter4"), effect.Frame(songPlaying: false));
+        Assert.Equal((256, "Prefilter13"), effect.Frame(songPlaying: true));
+        Assert.Equal((512, "Prefilter4"), effect.Frame(songPlaying: false));
+    }
+
+    [Fact]
+    public void Song_width_and_width_can_be_combined()
+    {
+        var effect = new Effect(Patch(new BloomBlurSettings(Width: 384, SongWidth: 256)));
+
+        Assert.Equal((384, "Prefilter13"), effect.Frame(songPlaying: false));
+        Assert.Equal((256, "Prefilter13"), effect.Frame(songPlaying: true));
+    }
+
+    [Fact]
+    public void Blur_settings_and_copy_fix_can_be_combined()
     {
         var effect = new Effect(StandIns.PatchAndLoad(StandIns.RenderingPath, m =>
         {
             BloomCopyPatch.Apply(m);
-            BloomBlurPatch.Apply(m, 256);
+            BloomBlurPatch.Apply(m, new BloomBlurSettings(Width: null, SongWidth: 256));
         }));
 
-        Assert.Equal(256, effect.Width);
-        Assert.Equal("Prefilter13", effect.RenderedPrefilter());
+        Assert.Equal((256, "Prefilter13"), effect.Frame(songPlaying: true));
     }
 
     [Fact]
     public void Patching_twice_is_reported_as_a_mismatch()
     {
         var module = StandIns.ReadModule(StandIns.RenderingPath);
-        BloomBlurPatch.Apply(module, 256);
+        BloomBlurPatch.Apply(module, new BloomBlurSettings(256, SongWidth: null));
 
-        Assert.Throws<PatchTargetMismatchException>(() => BloomBlurPatch.Apply(module, 128));
+        Assert.Throws<PatchTargetMismatchException>(() => BloomBlurPatch.Apply(module, new BloomBlurSettings(128, SongWidth: null)));
     }
 
     [Fact]
-    public void Description_mentions_the_prefilter_only_below_the_game_width()
+    public void Settings_describe_themselves()
     {
-        Assert.Equal("bloom blur 256 px wide with 13-tap prefilter", BloomBlurPatch.Describe(256));
-        Assert.Equal("bloom blur 512 px wide", BloomBlurPatch.Describe(512));
+        Assert.Equal("bloom blur 256 px wide", new BloomBlurSettings(256, null).ToString());
+        Assert.Equal("bloom blur 256 px wide while a song plays", new BloomBlurSettings(null, 256).ToString());
+        Assert.Equal("bloom blur 384 px wide, 256 px while a song plays", new BloomBlurSettings(384, 256).ToString());
     }
 
-    private static Assembly Patch(int width) =>
-        StandIns.PatchAndLoad(StandIns.RenderingPath, m => BloomBlurPatch.Apply(m, width));
+    private static Assembly Patch(BloomBlurSettings settings) =>
+        StandIns.PatchAndLoad(StandIns.RenderingPath, m => BloomBlurPatch.Apply(m, settings));
 
     /// <summary>A stand-in bloom effect from a loaded copy of the stand-in Rendering assembly.</summary>
     private sealed class Effect(Assembly rendering)
@@ -75,14 +93,14 @@ public class BloomBlurPatchTests
         private readonly object _effect = Activator.CreateInstance(rendering.GetType("PyramidBloomMainEffectSO", throwOnError: true)!)!;
         private readonly Type _renderer = rendering.GetType("PyramidBloomRendererSO", throwOnError: true)!;
 
-        public int Width => (int)_effect.GetType().GetProperty("bloomTextureWidth")!.GetValue(_effect)!;
-
-        /// <summary>Renders once and returns the prefilter pass the blur was asked to use.</summary>
-        public string RenderedPrefilter()
+        /// <summary>Renders one frame with the song flag set as given; returns the blur width and the prefilter pass used.</summary>
+        public (int Width, string Prefilter) Frame(bool songPlaying)
         {
+            Shader.SetGlobalFloat(SongPlayingFlagPatch.GlobalName, songPlaying ? 1f : 0f);
             Blitter.Blits.Clear();
+            var width = (int)_effect.GetType().GetProperty("bloomTextureWidth")!.GetValue(_effect)!;
             _effect.GetType().GetMethod("Render")!.Invoke(_effect, [new CommandBuffer(), new TextureHandle(1), new TextureHandle(2), new TextureHandle(3), Array.Empty<TextureHandle>(), 1f]);
-            return _renderer.GetProperty("LastPrefilterPass")!.GetValue(null)!.ToString()!;
+            return (width, _renderer.GetProperty("LastPrefilterPass")!.GetValue(null)!.ToString()!);
         }
     }
 }

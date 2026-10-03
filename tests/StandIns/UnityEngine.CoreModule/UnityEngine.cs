@@ -29,6 +29,17 @@ namespace UnityEngine
         public static void Log(object message) => Messages.Add(message);
     }
 
+    /// <summary>Stand-in for <c>UnityEngine.Shader</c>'s global float values; unset globals read as 0.</summary>
+    public static class Shader
+    {
+        /// <summary>Every global float set so far, by name.</summary>
+        public static Dictionary<string, float> Globals { get; } = [];
+
+        public static void SetGlobalFloat(string name, float value) => Globals[name] = value;
+
+        public static float GetGlobalFloat(string name) => Globals.GetValueOrDefault(name);
+    }
+
     /// <summary>Stand-in for <c>UnityEngine.Time</c> with settable clocks, in seconds.</summary>
     public static class Time
     {
